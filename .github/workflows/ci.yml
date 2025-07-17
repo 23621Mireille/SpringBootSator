@@ -1,4 +1,4 @@
-name: Java 21 CI
+name: Java CI - Spring Boot (Java 21)
 
 on:
   push:
@@ -6,46 +6,79 @@ on:
   pull_request:
     branches: [ "main" ]
 
+env:
+  MAVEN_OPTS: -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+
 jobs:
   build:
+    name: Build and Test
     runs-on: windows-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # Setup Java 21 with automatic dependency caching
     - name: Set up JDK 21
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v3
       with:
         java-version: '21'
-        distribution: 'microsoft'
-        check-latest: true
-        cache: 'maven'
+        distribution: 'temurin'
+        cache: 'maven'  # Change to 'gradle' if using Gradle
 
+    # Additional explicit caching for reliability
     - name: Cache Maven dependencies
+      if: ${{ !env.ACTIONS_SETUP_JAVA_CACHE_HIT }}
       uses: actions/cache@v3
       with:
         path: |
           ~/.m2/repository
-          **/target
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          target/
+        key: ${{ runner.os }}-jdk21-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          ${{ runner.os }}-maven-
+          ${{ runner.os }}-jdk21-maven-
+          
+    # Alternative for Gradle - remove if using Maven
+    # - name: Cache Gradle dependencies
+    #   if: ${{ !env.ACTIONS_SETUP_JAVA_CACHE_HIT }}
+    #   uses: actions/cache@v3
+    #   with:
+    #     path: |
+    #       ~/.gradle/caches
+    #       ~/.gradle/wrapper
+    #     key: ${{ runner.os }}-jdk21-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+    #     restore-keys: |
+    #       ${{ runner.os }}-jdk21-gradle-
 
-    - name: Build and test
-      run: mvnw.cmd clean verify
-      env:
-        MAVEN_OPTS: -Djava.security.egd=file:/dev/./urandom
-
-    - name: Upload test results
+    # Maven build and test execution
+    - name: Build and test with Maven
+      run: mvn clean verify
+      
+    # Alternative for Gradle - remove if using Maven
+    # - name: Build and test with Gradle
+    #   run: ./gradlew clean build --no-daemon
+    
+    - name: Upload test reports
       if: always()
       uses: actions/upload-artifact@v3
       with:
         name: test-results
         path: |
-          **/target/surefire-reports
-          **/target/failsafe-reports
-        retention-days: 3
-        env:
-  MAVEN_OPTS: -Djava.security.egd=file:/dev/./urandom # Faster startup
-  MAVEN_BATCH_MODE: true                              # Disable interactive mode
+          target/surefire-reports/
+          target/failsafe-reports/
+        # For Gradle use:
+        # build/reports/tests/
+        # build/test-results/
+
+  verification:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    
+    steps:
+    - name: Check build status
+      if: ${{ needs.build.result != 'success' }}
+      run: |
+        echo "Build failed with status: ${{ needs.build.result }}"
+        exit 1
