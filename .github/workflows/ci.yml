@@ -46,3 +46,6 @@ jobs:
           **/target/surefire-reports
           **/target/failsafe-reports
         retention-days: 3
+        env:
+  MAVEN_OPTS: -Djava.security.egd=file:/dev/./urandom # Faster startup
+  MAVEN_BATCH_MODE: true                              # Disable interactive mode
